@@ -64,14 +64,13 @@ class WebserviceOutputJSONCore implements WebserviceOutputInterface
     {
         switch ($apiNode->getType()) {
             case ApiNode::TYPE_VALUE:
-                return $apiNode->getValue();
+                return $this->getValueWithAttributes($apiNode);
             case ApiNode::TYPE_LANGUAGE:
                 $out = [];
                 foreach ($apiNode->getNodes() as $node) {
                     /* @var $node ApiNode */
                     $langId = $node->getAttributes()['id'];
-                    $value = $node->getValue();
-                    $out[] = ['id' => $langId, 'value' => $value];
+                    $out[] = ['id' => $langId, 'value' => $node->getValue()];
                 }
 
                 return $out;
@@ -80,6 +79,7 @@ class WebserviceOutputJSONCore implements WebserviceOutputInterface
                 foreach ($apiNode->getNodes() as $node) {
                     $out[] = $this->toJsonArray($node);
                 }
+                $this->injectAttributesIntoJson($out, $apiNode->getAttributes());
 
                 return $out;
             case ApiNode::TYPE_PARENT:
@@ -88,7 +88,53 @@ class WebserviceOutputJSONCore implements WebserviceOutputInterface
                     $out[$node->getName()] = $this->toJsonArray($node);
                 }
 
+                $this->injectAttributesIntoJson($out, $apiNode->getAttributes());
+
                 return $out;
         }
+    }
+
+    /**
+     * Inject attributes into output array
+     *
+     * @param array $out
+     * @param array $attributes
+     *
+     * @return void
+     */
+    private function injectAttributesIntoJson(&$out, $attributes)
+    {
+        if (empty($attributes) || !is_array($attributes)) {
+            return;
+        }
+
+        foreach ($attributes as $name => $value) {
+            $name = $name == 'xlink:href' ? 'href' : $name; //remove namespace from common attribute xlink:href
+            if (array_key_exists($name, $out)) {//if output array coincidentally already contains this key, avoid rewriting its value - attributes has lesser priority
+                continue;
+            }
+
+            $out[$name] = $value;
+        }
+    }
+
+    /**
+     * Get value from node with injected attributes.
+     * If $apiNode value is null, output is changed from simple value into array with attributes.
+     *
+     * @param ApiNode $apiNode
+     *
+     * @return mixed
+     */
+    private function getValueWithAttributes($apiNode)
+    {
+        if (!empty($apiNode->getValue()) || empty($apiNode->getAttributes())) {   //if ApiNode contains any value or there is no attribute to output instead, just return the value itself
+            return $apiNode->getValue();
+        }
+
+        $out = [];  //in situations, where there are attributes, but no values, return rather array of attributes to have at least some output
+        $this->injectAttributesIntoJson($out, $apiNode->getAttributes());
+
+        return $out;
     }
 }
